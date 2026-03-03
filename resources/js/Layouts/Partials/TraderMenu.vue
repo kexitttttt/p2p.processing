@@ -5,13 +5,30 @@ import ViewModeSwitcher from "@/Layouts/Partials/ViewModeSwitcher.vue";
 import {useUserStore} from "@/store/user.js";
 import OnlineSwitcher from "@/Layouts/Partials/OnlineSwitcher.vue";
 
-const menu = ref(usePage().props.menu);
+const menu = ref(usePage().props.menu ?? {});
 const userStore = useUserStore();
 const canWorkWithoutDevice = computed(() => !!usePage().props.auth?.user?.can_work_without_device);
 const payoutsEnabled = computed(() => !!usePage().props.auth?.user?.payouts_enabled);
+const currentRouteName = computed(() => route().current() || '');
 
-router.on('success', (event) => {
-    menu.value = usePage().props.menu;
+const isCurrent = (pattern) => {
+    const currentName = currentRouteName.value;
+
+    if (!currentName) {
+        return false;
+    }
+
+    if (pattern.endsWith('.*')) {
+        const basePattern = pattern.slice(0, -2);
+
+        return currentName === basePattern || currentName.startsWith(`${basePattern}.`);
+    }
+
+    return currentName === pattern;
+}
+
+router.on('success', () => {
+    menu.value = usePage().props.menu ?? {};
 })
 </script>
 
@@ -23,7 +40,7 @@ router.on('success', (event) => {
                 <OnlineSwitcher/>
             </div>
         </div>
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('trader.main.index') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('trader.main.index') }]">
             <span
                 @click="router.visit(route('trader.main.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('trader.main.index'), { preserveScroll: true })"
@@ -36,7 +53,7 @@ router.on('success', (event) => {
                 Главная
             </span>
         </li>
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('notifications.*') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('notifications.*') }]">
             <span
                 @click="router.visit(route('notifications.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('notifications.index'), { preserveScroll: true })"
@@ -52,7 +69,7 @@ router.on('success', (event) => {
                 </span>
             </span>
         </li>
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('payment-details.*') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('payment-details.*') }]">
             <span
                 @click="router.visit(route('payment-details.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('payment-details.index'), { preserveScroll: true })"
@@ -68,7 +85,7 @@ router.on('success', (event) => {
                 </span>
             </span>
         </li>
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('orders.*') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('orders.*') }]">
             <span
                 @click="router.visit(route('orders.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('orders.index'), { preserveScroll: true })"
@@ -86,7 +103,7 @@ router.on('success', (event) => {
         </li>
         <li
             v-if="payoutsEnabled"
-            :class="[{ 'bg-base-content/10 rounded-lg': route().current('trader.payouts.*') }]"
+            :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('trader.payouts.*') }]"
         >
             <span
                 @click="router.visit(route('trader.payouts.index'), { preserveScroll: true })"
@@ -103,7 +120,7 @@ router.on('success', (event) => {
                 </span>
             </span>
         </li>
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('disputes.*') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('disputes.*') }]">
             <span
                 @click="router.visit(route('disputes.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('disputes.index'), { preserveScroll: true })"
@@ -119,7 +136,7 @@ router.on('success', (event) => {
                 </span>
             </span>
         </li>
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('wallet.*') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('wallet.*') }]">
             <span
                 @click="router.visit(route('wallet.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('wallet.index'), { preserveScroll: true })"
@@ -133,7 +150,7 @@ router.on('success', (event) => {
             </span>
         </li>
 
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('funding.*') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('funding.*') }]">
             <span
                 @click="router.visit(route('funding.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('funding.index'), { preserveScroll: true })"
@@ -147,7 +164,7 @@ router.on('success', (event) => {
             </span>
         </li>
 
-        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('trader.statistics.*') }]">
+        <li :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('trader.statistics.*') }]">
             <span
                 @click="router.visit(route('trader.statistics.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('trader.statistics.index'), { preserveScroll: true })"
@@ -160,7 +177,7 @@ router.on('success', (event) => {
                 Статистика
             </span>
         </li>
-        <li v-if="!canWorkWithoutDevice" :class="[{ 'bg-base-content/10 rounded-lg': route().current('sms-logs.*') }]">
+        <li v-if="!canWorkWithoutDevice" :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('sms-logs.*') }]">
             <span
                 @click="router.visit(route('sms-logs.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('sms-logs.index'), { preserveScroll: true })"
@@ -173,7 +190,7 @@ router.on('success', (event) => {
                 Сообщения
             </span>
         </li>
-        <li v-if="!canWorkWithoutDevice" :class="[{ 'bg-base-content/10 rounded-lg': route().current('trader.devices.*') }]">
+        <li v-if="!canWorkWithoutDevice" :class="[{ 'bg-base-content/10 rounded-lg': isCurrent('trader.devices.*') }]">
             <span
                 @click="router.visit(route('trader.devices.index'), { preserveScroll: true })"
                 @keydown.enter.space="router.visit(route('trader.devices.index'), { preserveScroll: true })"
