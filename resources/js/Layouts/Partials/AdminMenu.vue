@@ -190,6 +190,22 @@ router.on('success', (event) => {
                 Мерчанты
             </span>
         </li>
+
+        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('admin.funding-cycles.*') }]">
+            <span
+                @click="router.visit(route('admin.funding-cycles.index'), { preserveScroll: true })"
+                @keydown.enter.space="router.visit(route('admin.funding-cycles.index'), { preserveScroll: true })"
+                role="link"
+                tabindex="0"
+            >
+                <svg class="size-5 opacity-30" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.25 18.75a1.5 1.5 0 0 1-1.5-1.5V6a1.5 1.5 0 0 1 1.5-1.5h7.5l3 3v9.75a1.5 1.5 0 0 1-1.5 1.5h-9Z"/>
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v6m-3-3h6"/>
+                </svg>
+                Оборотные пакеты
+            </span>
+        </li>
+
         <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('admin.deposits.*') }]">
             <span
                 @click="router.visit(route('admin.deposits.index'), { preserveScroll: true })"

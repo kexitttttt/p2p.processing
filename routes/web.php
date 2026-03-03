@@ -7,6 +7,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TelegramSettingsController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\Trader\FundingController;
+use App\Http\Controllers\Admin\FundingCycleController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/payment/{order:uuid}', [\App\Http\Controllers\PaymentLinkController::class, 'show'])->name('payment.show');
@@ -70,11 +71,6 @@ Route::group(['middleware' => ['2fa']], function () {
         Route::patch('/user/online', [\App\Http\Controllers\UserOnlineController::class, 'toggle'])->name('user.online.toggle');
         Route::get('/payouts/{payout:uuid}/receipt', [PayoutReceiptController::class, 'show'])->name('payouts.receipts.show');
     });
-
-	Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('/funding', [FundingController::class, 'index'])->name('funding.index');
-    Route::post('/funding/buy', [FundingController::class, 'purchase'])->name('funding.purchase');
-});
 
     Route::group(['middleware' => ['auth', 'banned', 'role:Trader|Merchant|Super Admin']], function () {
         Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllRead'])->name('notifications.mark-all-read');
@@ -259,6 +255,9 @@ Route::group(['middleware' => ['2fa']], function () {
 
         Route::get('/deposits', [\App\Http\Controllers\Admin\DepositController::class, 'index'])->name('deposits.index');
         Route::get('/withdrawals', [\App\Http\Controllers\Admin\WithdrawalController::class, 'index'])->name('withdrawals.index');
+
+        Route::get('/funding-cycles', [FundingCycleController::class, 'index'])->name('funding-cycles.index');
+        Route::patch('/funding-cycles/{cycle}/confirm', [FundingCycleController::class, 'confirm'])->name('funding-cycles.confirm');
         Route::get('/withdrawals/address/whitelist', [\App\Http\Controllers\Admin\AddressWhitelistController::class, 'index'])->name('withdrawals.address.whitelist.index');
         Route::patch('/withdrawals/{invoice}/success', [\App\Http\Controllers\Admin\WithdrawalController::class, 'success'])->name('withdrawals.success');
         Route::patch('/withdrawals/{invoice}/fail', [\App\Http\Controllers\Admin\WithdrawalController::class, 'fail'])->name('withdrawals.fail');

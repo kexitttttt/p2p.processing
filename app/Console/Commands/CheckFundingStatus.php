@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\TraderCycle;
 use Illuminate\Console\Command;
 
 class CheckFundingStatus extends Command

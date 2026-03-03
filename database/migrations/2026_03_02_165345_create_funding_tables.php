@@ -49,7 +49,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('funding_tables');
+        Schema::dropIfExists('trader_cycles');
         Schema::dropIfExists('funding_products');
 
         if (Schema::hasColumn('wallets', 'locked_balance')) {

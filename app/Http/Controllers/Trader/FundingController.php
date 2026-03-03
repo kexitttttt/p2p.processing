@@ -12,16 +12,23 @@ use Inertia\Inertia;
 
 class FundingController extends Controller
 {
+    private const MAX_ACTIVE_CYCLES = 3;
+    private function extractTrustBalance(Wallet $wallet): float
+    {
+        if (!$wallet->trust_balance) {
+            return 0;
+        }
+
+        $moneyArray = $wallet->trust_balance->toArray();
+
+        return (float) ($moneyArray['amount'] ?? $moneyArray['value'] ?? 0);
+    }
+
     public function index()
     {
         $user = auth()->user();
         $wallet = Wallet::where('user_id', $user->id)->first();
-        $balance = 0;
-
-	if ($wallet && $wallet->trust_balance) {
-		$moneyArray = $wallet->trust_balance->toArray();
-		$balance = (float) ($moneyArray['amount'] ?? $moneyArray['value'] ?? 0);
-	}
+        $balance = $wallet ? $this->extractTrustBalance($wallet) : 0;
 
         return Inertia::render('Funding/Index', [
             'products' => FundingProduct::where('is_active', true)->get(),
@@ -43,10 +50,31 @@ class FundingController extends Controller
         $user = auth()->user();
         $product = FundingProduct::findOrFail($request->product_id);
         $wallet = Wallet::where('user_id', $user->id)->firstOrFail();
-        $currentBalance = (float) $wallet->trust_balance;
+        if (!$product->is_active) {
+            return back()->withErrors(['amount' => 'Пакет недоступен для покупки']);
+        }
+
+        $currentBalance = $this->extractTrustBalance($wallet);
 
         if ($currentBalance < $request->amount) {
             return back()->withErrors(['amount' => 'Недостаточно средств на Trust балансе']);
+        }
+
+        $activeCyclesCount = TraderCycle::where('user_id', $user->id)
+            ->whereIn('status', ['active', 'ready_to_close'])
+            ->count();
+
+        if ($activeCyclesCount >= self::MAX_ACTIVE_CYCLES) {
+            return back()->withErrors(['amount' => 'Достигнут лимит активных циклов (3 одновременно)']);
+        }
+
+        $traderActiveVolume = TraderCycle::where('user_id', $user->id)
+            ->where('product_id', $product->id)
+            ->whereIn('status', ['active', 'ready_to_close'])
+            ->sum('amount');
+
+        if ($product->max_per_trader > 0 && ($traderActiveVolume + $request->amount) > $product->max_per_trader) {
+            return back()->withErrors(['amount' => 'Превышен лимит на трейдера для этого пакета']);
         }
 
         if ($product->max_total_volume > 0 &&
