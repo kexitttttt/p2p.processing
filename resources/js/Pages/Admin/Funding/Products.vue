@@ -13,6 +13,9 @@ const createForm = useForm({
     profit_percent: 20,
     max_total_volume: 0,
     min_amount: 1000,
+    freeze_days: 1,
+    profit_percent: 20,
+    max_total_volume: 0,
     max_per_trader: 0,
     is_active: true,
 });
@@ -55,6 +58,7 @@ const saveProduct = (productId) => {
                 <div>
                     <h1 class="text-2xl font-semibold">Оборотные пакеты · управление позициями</h1>
                     <p class="text-base-content/70">Можно менять название, срок в часах, размер пакета, лимит по кол-ву пакетов на трейдера и активность.</p>
+                    <p class="text-base-content/70">Можно менять название, срок, процент, лимиты и активность каждой позиции.</p>
                 </div>
                 <Link :href="route('admin.funding-cycles.index')" class="btn btn-outline btn-sm">
                     Подтверждение выплат
@@ -71,6 +75,10 @@ const saveProduct = (productId) => {
                         <input v-model.number="createForm.max_total_volume" type="number" min="0" step="0.01" class="input input-bordered" placeholder="Лимит продукта (скрыт трейдеру)" required>
                         <input v-model.number="createForm.min_amount" type="number" min="1" step="0.01" class="input input-bordered" placeholder="Сумма 1 пакета" required>
                         <input v-model.number="createForm.max_per_trader" type="number" min="0" step="1" class="input input-bordered" placeholder="Лимит пакетов на трейдера" required>
+                        <input v-model.number="createForm.freeze_days" type="number" min="1" class="input input-bordered" placeholder="Срок, дн." required>
+                        <input v-model.number="createForm.profit_percent" type="number" min="0" step="0.01" class="input input-bordered" placeholder="%" required>
+                        <input v-model.number="createForm.max_total_volume" type="number" min="0" step="0.01" class="input input-bordered" placeholder="Лимит продукта" required>
+                        <input v-model.number="createForm.max_per_trader" type="number" min="0" step="0.01" class="input input-bordered" placeholder="Лимит трейдера" required>
                         <label class="label cursor-pointer gap-2 md:col-span-2">
                             <span class="label-text">Активен</span>
                             <input v-model="createForm.is_active" type="checkbox" class="toggle toggle-primary">
@@ -94,6 +102,11 @@ const saveProduct = (productId) => {
                             <th>Текущий объём</th>
                             <th>Сумма 1 пакета</th>
                             <th>Лимит пакетов</th>
+                            <th>Срок (дни)</th>
+                            <th>%</th>
+                            <th>Лимит продукта</th>
+                            <th>Текущий объём</th>
+                            <th>Лимит трейдера</th>
                             <th>Активен</th>
                             <th></th>
                         </tr>
@@ -109,6 +122,7 @@ const saveProduct = (productId) => {
                             <td>{{ Number(product.current_volume).toFixed(2) }}</td>
                             <td><input v-model.number="productForms[product.id].min_amount" type="number" min="1" step="0.01" class="input input-bordered input-sm w-36"></td>
                             <td><input v-model.number="productForms[product.id].max_per_trader" type="number" min="0" step="1" class="input input-bordered input-sm w-36"></td>
+                            <td><input v-model.number="productForms[product.id].max_per_trader" type="number" min="0" step="0.01" class="input input-bordered input-sm w-36"></td>
                             <td>
                                 <input v-model="productForms[product.id].is_active" type="checkbox" class="toggle toggle-primary toggle-sm">
                             </td>
@@ -118,6 +132,7 @@ const saveProduct = (productId) => {
                         </tr>
                         <tr v-if="products.length === 0">
                             <td colspan="9" class="text-center text-base-content/60 py-8">Позиции не созданы.</td>
+                            <td colspan="8" class="text-center text-base-content/60 py-8">Позиции не созданы.</td>
                         </tr>
                         </tbody>
                     </table>

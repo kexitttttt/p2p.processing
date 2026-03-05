@@ -15,6 +15,7 @@ const props = defineProps({
     historyContracts: Array,
     summary: Object,
     historySummary: Object,
+    cycles: Array,
     balance: Number,
 });
 
@@ -24,12 +25,14 @@ const selectedProduct = ref(null);
 const form = useForm({
     product_id: null,
     quantity: 1,
+    amount: '',
 });
 
 const openBuyModal = (product) => {
     selectedProduct.value = product;
     form.product_id = product.id;
     form.quantity = 1;
+    form.amount = '';
     isModalOpen.value = true;
 };
 
@@ -54,6 +57,8 @@ const purchaseTotal = computed(() => {
     if (!selectedProduct.value) return 0;
 
     return (Number(selectedProduct.value.min_amount || 10) * Number(form.quantity || 1)).toFixed(2);
+    if (!form.amount || !selectedProduct.value) return 0;
+    return (Number(form.amount) * (Number(selectedProduct.value.profit_percent) / 100)).toFixed(2);
 });
 
 const formatDate = (date) => new Date(date).toLocaleString('ru-RU', {
@@ -72,6 +77,10 @@ const getStatusLabel = (status) => ({
     ready_to_close: 'Ожидает подтверждения',
     completed: 'Завершён',
     cancelled: 'Отменён',
+    active: 'В работе',
+    ready_to_close: 'Ожидает подтверждения',
+    completed: 'Выплачено',
+    cancelled: 'Отменено',
 }[status] || status);
 
 const availableVolume = (product) => {
@@ -113,13 +122,24 @@ const contractProgress = (contract) => {
 
 const remaining = (returnAt, status) => {
     if (status === 'ready_to_close') return 'Ожидает подтверждения';
+    if (Number(props.balance) < 10) return false;
+
+    const volumeLeft = availableVolume(product);
+
+    return volumeLeft === null || volumeLeft >= 10;
+};
+
+const remaining = (returnAt, status) => {
     if (status !== 'active') return '—';
     const diff = new Date(returnAt).getTime() - Date.now();
     if (diff <= 0) return 'Завершён';
-
     const hours = Math.floor(diff / (1000 * 60 * 60));
 
     return `${hours}ч`;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+    return `${days}д ${hours}ч`;
 };
 </script>
 
@@ -163,6 +183,18 @@ const remaining = (returnAt, status) => {
                                 <span>Сумма 1 пакета</span>
                                 <span class="font-medium text-base-content text-right">
                                     {{ Number(product.min_amount || 10).toLocaleString('ru-RU') }} USDT
+                                <span class="font-medium text-base-content">{{ product.freeze_days }} дн.</span>
+                            </div>
+                            <div class="flex justify-between gap-4">
+                                <span>Лимит на трейдера</span>
+                                <span class="font-medium text-base-content text-right">
+                                    {{ Number(product.max_per_trader || 0).toLocaleString('ru-RU') }} USDT
+                                </span>
+                            </div>
+                            <div class="flex justify-between gap-4">
+                                <span>Доступный объём</span>
+                                <span class="font-medium text-base-content text-right break-words">
+                                    {{ Number(product.current_volume).toLocaleString('ru-RU') }} / {{ Number(product.max_total_volume).toLocaleString('ru-RU') }}
                                 </span>
                             </div>
                         </div>
@@ -249,7 +281,10 @@ const remaining = (returnAt, status) => {
                             <div class="text-xl font-semibold text-success">+{{ Number(historySummary.completed_profit_total).toLocaleString('ru-RU') }}</div>
                         </div>
                     </div>
-
+                <div class="card-body p-0">
+                    <div class="px-5 pt-5 pb-3">
+                        <h3 class="text-lg font-semibold">Мои покупки</h3>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="table table-sm sm:table-md">
                             <thead>
@@ -271,6 +306,31 @@ const remaining = (returnAt, status) => {
                             </tr>
                             <tr v-if="historyContracts.length === 0">
                                 <td colspan="5" class="text-center text-base-content/60 py-8">История пока пуста.</td>
+                                <th>Статус</th>
+                                <th class="hidden md:table-cell">Осталось времени</th>
+                                <th>Ожидаемая прибыль</th>
+                                <th class="hidden lg:table-cell">Дата окончания</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr v-for="cycle in cycles" :key="cycle.id">
+                                <td>
+                                    <div class="font-medium">{{ cycle.product?.name || '—' }}</div>
+                                    <div class="text-xs text-base-content/60 md:hidden">{{ remaining(cycle.return_at, cycle.status) }}</div>
+                                    <div class="text-xs text-base-content/60 lg:hidden">до {{ formatDate(cycle.return_at) }}</div>
+                                </td>
+                                <td>{{ Number(cycle.amount).toFixed(2) }} USDT</td>
+                                <td>
+                                    <span class="badge" :class="getStatusClasses(cycle.status)">
+                                        {{ getStatusLabel(cycle.status) }}
+                                    </span>
+                                </td>
+                                <td class="hidden md:table-cell">{{ remaining(cycle.return_at, cycle.status) }}</td>
+                                <td class="text-success">+{{ (Number(cycle.amount) * (Number(cycle.profit_percent) / 100)).toFixed(2) }} USDT</td>
+                                <td class="hidden lg:table-cell">{{ formatDate(cycle.return_at) }}</td>
+                            </tr>
+                            <tr v-if="cycles.length === 0">
+                                <td colspan="6" class="text-center text-base-content/60 py-8">У вас пока нет покупок.</td>
                             </tr>
                             </tbody>
                         </table>
@@ -296,6 +356,16 @@ const remaining = (returnAt, status) => {
                             min="1"
                         />
                         <InputError :message="form.errors.quantity" class="mt-2" />
+                        <InputLabel for="amount" value="Сумма (USDT)" />
+                        <TextInput
+                            id="amount"
+                            type="number"
+                            v-model="form.amount"
+                            class="mt-1 block w-full"
+                            placeholder="Мин. 10.00"
+                            step="0.01"
+                        />
+                        <InputError :message="form.errors.amount" class="mt-2" />
                     </div>
 
                     <div class="rounded-lg border border-base-300 p-4 text-sm space-y-2">
@@ -312,6 +382,9 @@ const remaining = (returnAt, status) => {
                             <span>Сумма</span>
                             <span class="font-semibold">{{ purchaseTotal }} USDT</span>
                         </div>
+                            <span class="font-semibold">{{ selectedProduct?.freeze_days }} дн.</span>
+                        </div>
+                        <div class="divider my-1"></div>
                         <div class="flex justify-between text-base">
                             <span>Ожидаемая прибыль</span>
                             <span class="font-semibold text-success">+{{ profitCalculation }} USDT</span>

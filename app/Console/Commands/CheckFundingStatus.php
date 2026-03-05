@@ -17,7 +17,11 @@ class CheckFundingStatus extends Command
 			->get();
 
 		foreach ($cycles as $cycle) {
+<<<<<<< HEAD
 			$cycle->update(['status' => 'ready_to_close', 'is_overdue' => false]);
+=======
+			$cycle->update(['status' => 'ready_to_close']);
+>>>>>>> origin/main
 			$this->info("Cycle ID {$cycle->id} is ready to close.");
 		}
 	}
