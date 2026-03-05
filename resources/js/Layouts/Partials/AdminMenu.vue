@@ -202,7 +202,22 @@ router.on('success', (event) => {
                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.25 18.75a1.5 1.5 0 0 1-1.5-1.5V6a1.5 1.5 0 0 1 1.5-1.5h7.5l3 3v9.75a1.5 1.5 0 0 1-1.5 1.5h-9Z"/>
                     <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v6m-3-3h6"/>
                 </svg>
-                Оборотные пакеты
+                Подтверждение оборота
+            </span>
+        </li>
+
+        <li :class="[{ 'bg-base-content/10 rounded-lg': route().current('admin.funding-products.*') }]">
+            <span
+                @click="router.visit(route('admin.funding-products.index'), { preserveScroll: true })"
+                @keydown.enter.space="router.visit(route('admin.funding-products.index'), { preserveScroll: true })"
+                role="link"
+                tabindex="0"
+            >
+                <svg class="size-5 opacity-30" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7.5A1.5 1.5 0 0 1 4.5 6h15A1.5 1.5 0 0 1 21 7.5v9A1.5 1.5 0 0 1 19.5 18h-15A1.5 1.5 0 0 1 3 16.5v-9Z"/>
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.5 10.5h9m-9 3h6"/>
+                </svg>
+                Позиции оборота
             </span>
         </li>
 

@@ -24,6 +24,7 @@ const errors = ref({});
 const payment_gateways = ref([]);
 const devices = ref([]);
 const canWorkWithoutDevice = ref(usePage().props.auth?.user?.can_work_without_device ?? false);
+const hasPaymentGateways = ref(true);
 const currentUser = usePage().props.auth?.user;
 const isVipUser = computed(() => {
     return currentUser?.is_vip === true || currentUser?.is_vip === 1 || currentUser?.is_temp_vip_active;
@@ -160,6 +161,7 @@ const loadCreateData = () => {
                 name: `${device.name}`
             }));
             canWorkWithoutDevice.value = !!data.canWorkWithoutDevice;
+            hasPaymentGateways.value = data.hasPaymentGateways !== false;
             if (canWorkWithoutDevice.value) {
                 form.value.user_device_id = null;
             }
@@ -219,6 +221,10 @@ watch(
                 <span class="loading loading-spinner loading-md"></span>
             </div>
             <form v-else @submit.prevent="submit" class="space-y-6">
+                <div v-if="!hasPaymentGateways" class="alert alert-warning">
+                    <span>Нет доступных платежных методов. Сначала добавьте платежные методы в админке (Валюты / Платежные методы), затем создавайте реквизиты.</span>
+                </div>
+
                 <div class="rounded-box border border-base-300 p-4">
                     <div class="text-sm font-medium mb-3">
                         Параметры реквизита
@@ -241,7 +247,7 @@ watch(
                                 default_title="Выберите валюту"
                                 :default_value="null"
                                 @change="selectedDetailType = null; form.payment_gateway_ids = []; errors.currency = null"
-                                :disabled="processing"
+                                :disabled="processing || !hasPaymentGateways"
                             ></Select>
                             <InputError :message="errors.currency?.[0]" class="mt-2" />
                         </div>
@@ -289,7 +295,7 @@ watch(
                                 :enable-search="true"
                                 :single-select="!isMultipleGatewaysAllowed"
                                 :placeholder="isMultipleGatewaysAllowed ? 'Выберите платежные методы' : 'Выберите платежный метод'"
-                                :disabled="processing"
+                                :disabled="processing || !hasPaymentGateways"
                             />
                             <InputError :message="errors.payment_gateway_ids?.[0]" class="mt-2"/>
                         </div>
@@ -309,7 +315,7 @@ watch(
                                 name="name"
                                 default_title="Выберите устройство"
                                 @change="errors.user_device_id = null"
-                                :disabled="processing"
+                                :disabled="processing || !hasPaymentGateways"
                             ></Select>
                             <InputError :message="errors.user_device_id?.[0]" class="mt-2"/>
                         </div>
@@ -330,7 +336,7 @@ watch(
                                     class="mt-1 block w-full ps-7"
                                     :error="!!errors.detail?.[0]"
                                     @input="errors.detail = null"
-                                    :disabled="processing"
+                                    :disabled="processing || !hasPaymentGateways"
                                 />
                             </div>
                             <InputError :message="errors.detail?.[0]" class="mt-2" />
@@ -352,7 +358,7 @@ watch(
                                     class="mt-1 block w-full ps-7"
                                     :error="!!errors.detail?.[0]"
                                     @input="errors.detail = null"
-                                    :disabled="processing"
+                                    :disabled="processing || !hasPaymentGateways"
                                 />
                             </div>
                             <InputError :message="errors.detail?.[0]" class="mt-2" />
@@ -371,7 +377,7 @@ watch(
                                 placeholder="0000 0000 0000 0000"
                                 :error="!!errors.detail?.[0]"
                                 @input="errors.detail = null"
-                                :disabled="processing"
+                                :disabled="processing || !hasPaymentGateways"
                             />
                             <InputError :message="errors.detail?.[0]" class="mt-2" />
                         </div>
@@ -390,7 +396,7 @@ watch(
                                 placeholder="00000000000000000000"
                                 :error="!!errors.detail?.[0]"
                                 @input="errors.detail = null"
-                                :disabled="processing"
+                                :disabled="processing || !hasPaymentGateways"
                             />
                             <InputError :message="errors.detail?.[0]" class="mt-2" />
                         </div>
@@ -409,7 +415,7 @@ watch(
                                 placeholder="https://example.com/pay"
                                 :error="!!errors.detail?.[0]"
                                 @input="errors.detail = null"
-                                :disabled="processing"
+                                :disabled="processing || !hasPaymentGateways"
                             />
                             <InputError :message="errors.detail?.[0]" class="mt-2" />
                         </div>
@@ -433,7 +439,7 @@ watch(
                                     class="mt-1 block w-full"
                                     :error="!!errors.name?.[0]"
                                     @input="errors.name = null"
-                                    :disabled="processing"
+                                    :disabled="processing || !hasPaymentGateways"
                                 />
                                 <InputError :message="errors.name?.[0]" class="mt-2" />
                             </div>
@@ -450,7 +456,7 @@ watch(
                                     class="mt-1 block w-full"
                                     :error="!!errors.initials?.[0]"
                                     @input="errors.initials = null"
-                                    :disabled="processing"
+                                    :disabled="processing || !hasPaymentGateways"
                                 />
                                 <InputError :message="errors.initials?.[0]" class="mt-2" />
                             </div>
@@ -501,7 +507,7 @@ watch(
                                     class="mt-1 block w-full"
                                     :error="!!errors.daily_limit?.[0]"
                                     @input="errors.daily_limit = null"
-                                    :disabled="processing"
+                                    :disabled="processing || !hasPaymentGateways"
                                 />
                                 <InputError :message="errors.daily_limit?.[0]" class="mt-2" />
                             </div>
@@ -517,7 +523,7 @@ watch(
                                     class="mt-1 block w-full"
                                     :error="!!errors.daily_successful_orders_limit?.[0]"
                                     @input="errors.daily_successful_orders_limit = null"
-                                    :disabled="processing"
+                                    :disabled="processing || !hasPaymentGateways"
                                 />
                                 <InputError :message="errors.daily_successful_orders_limit?.[0]" class="mt-2" />
                             </div>
@@ -557,7 +563,7 @@ watch(
                     <div>
                         <label class="label cursor-pointer mb-3 mt-3 justify-start gap-3">
                             <span class="label-text">Реквизит включен</span>
-                            <input type="checkbox" class="toggle toggle-primary" v-model="form.is_active" :disabled="processing" />
+                            <input type="checkbox" class="toggle toggle-primary" v-model="form.is_active" :disabled="processing || !hasPaymentGateways" />
                         </label>
                     </div>
                 </template>
@@ -565,7 +571,7 @@ watch(
         </ModalBody>
         <ModalFooter>
             <button @click="close" type="button" class="btn btn-sm">Отмена</button>
-            <button @click="submit" type="button" class="btn btn-sm btn-primary" :class="{ 'btn-disabled': processing }" :disabled="processing">
+            <button @click="submit" type="button" class="btn btn-sm btn-primary" :class="{ 'btn-disabled': processing }" :disabled="processing || !hasPaymentGateways">
                 Сохранить
             </button>
         </ModalFooter>

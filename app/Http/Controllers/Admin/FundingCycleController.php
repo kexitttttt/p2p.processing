@@ -12,13 +12,11 @@ class FundingCycleController extends Controller
 {
     private function extractTrustBalance(Wallet $wallet): float
     {
-        if (!$wallet->trust_balance) {
+        if (! $wallet->trust_balance) {
             return 0;
         }
 
-        $moneyArray = $wallet->trust_balance->toArray();
-
-        return (float) ($moneyArray['amount'] ?? $moneyArray['value'] ?? 0);
+        return (float) $wallet->trust_balance->toPrecision();
     }
 
     public function index()
@@ -65,6 +63,7 @@ class FundingCycleController extends Controller
                 'status' => 'completed',
                 'confirmed_by_admin_id' => auth()->id(),
                 'confirmed_at' => now(),
+                'is_overdue' => false,
             ]);
 
             $lockedCycle->product()->decrement('current_volume', $lockedCycle->amount);

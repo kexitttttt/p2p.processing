@@ -60,7 +60,9 @@ class PaymentDetailController extends Controller
 
     public function createData(Request $request)
     {
-        $paymentGateways = PaymentGatewayResource::collection(queries()->paymentGateway()->getAllActive())->resolve();
+        $paymentGateways = PaymentGatewayResource::collection(
+            \App\Models\PaymentGateway::query()->orderByDesc('is_active')->orderBy('name')->get()
+        )->resolve();
 
         $userId = auth()->id();
         $requestedUserId = (int) $request->input('user_id', 0);
@@ -86,6 +88,7 @@ class PaymentDetailController extends Controller
                 'paymentGateways' => $paymentGateways,
                 'devices' => $devices,
                 'canWorkWithoutDevice' => $canWorkWithoutDevice,
+                'hasPaymentGateways' => count($paymentGateways) > 0,
             ],
         ]);
     }

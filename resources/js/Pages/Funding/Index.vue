@@ -11,7 +11,10 @@ import InputError from '@/Components/InputError.vue';
 
 const props = defineProps({
     products: Array,
-    cycles: Array,
+    activeContracts: Array,
+    historyContracts: Array,
+    summary: Object,
+    historySummary: Object,
     balance: Number,
 });
 
@@ -20,13 +23,13 @@ const selectedProduct = ref(null);
 
 const form = useForm({
     product_id: null,
-    amount: '',
+    quantity: 1,
 });
 
 const openBuyModal = (product) => {
     selectedProduct.value = product;
     form.product_id = product.id;
-    form.amount = '';
+    form.quantity = 1;
     isModalOpen.value = true;
 };
 
@@ -43,8 +46,14 @@ const submitPurchase = () => {
 };
 
 const profitCalculation = computed(() => {
-    if (!form.amount || !selectedProduct.value) return 0;
-    return (Number(form.amount) * (Number(selectedProduct.value.profit_percent) / 100)).toFixed(2);
+    if (!selectedProduct.value) return 0;
+    return (Number(selectedProduct.value.min_amount || 10) * Number(form.quantity || 1) * (Number(selectedProduct.value.profit_percent) / 100)).toFixed(2);
+});
+
+const purchaseTotal = computed(() => {
+    if (!selectedProduct.value) return 0;
+
+    return (Number(selectedProduct.value.min_amount || 10) * Number(form.quantity || 1)).toFixed(2);
 });
 
 const formatDate = (date) => new Date(date).toLocaleString('ru-RU', {
@@ -59,26 +68,58 @@ const getStatusClasses = (status) => ({
 }[status] || 'badge-ghost');
 
 const getStatusLabel = (status) => ({
-    active: 'В работе',
+    active: 'Активен',
     ready_to_close: 'Ожидает подтверждения',
-    completed: 'Выплачено',
-    cancelled: 'Отменено',
+    completed: 'Завершён',
+    cancelled: 'Отменён',
 }[status] || status);
+
+const availableVolume = (product) => {
+    if (Number(product.max_total_volume) <= 0) return null;
+
+    return Math.max(Number(product.max_total_volume) - Number(product.current_volume), 0);
+};
 
 const progress = (product) => {
     if (Number(product.max_total_volume) <= 0) return 0;
     return Math.min((Number(product.current_volume) / Number(product.max_total_volume)) * 100, 100);
 };
 
+const canPurchase = (product) => {
+    if (!product?.is_active) return false;
+    const minAmount = Number(product.min_amount || 10);
+
+    if (Number(props.balance) < minAmount) return false;
+
+    return true;
+};
+
+const contractProfit = (contract) => Number(contract.amount) * (Number(contract.profit_percent) / 100);
+const contractTotal = (contract) => Number(contract.amount) + contractProfit(contract);
+
+const contractProgress = (contract) => {
+    if (contract.status === 'ready_to_close' || contract.status === 'completed') return 100;
+
+    const fundedAt = new Date(contract.funded_at).getTime();
+    const returnAt = new Date(contract.return_at).getTime();
+    const totalDuration = returnAt - fundedAt;
+
+    if (totalDuration <= 0) return 0;
+
+    const elapsed = Date.now() - fundedAt;
+
+    return Math.max(0, Math.min((elapsed / totalDuration) * 100, 100));
+};
+
 const remaining = (returnAt, status) => {
+    if (status === 'ready_to_close') return 'Ожидает подтверждения';
     if (status !== 'active') return '—';
     const diff = new Date(returnAt).getTime() - Date.now();
     if (diff <= 0) return 'Завершён';
 
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
 
-    return `${days}д ${hours}ч`;
+    return `${hours}ч`;
 };
 </script>
 
@@ -105,29 +146,23 @@ const remaining = (returnAt, status) => {
                 <div
                     v-for="product in products"
                     :key="product.id"
-                    class="card bg-base-100 border border-base-300 shadow-sm"
+                    class="card bg-base-100 border border-base-300 shadow-sm h-full"
                 >
-                    <div class="card-body p-5">
+                    <div class="card-body p-5 flex flex-col">
                         <div class="flex items-start justify-between gap-3">
                             <h2 class="card-title text-lg">{{ product.name }}</h2>
                             <span class="badge badge-success">+{{ product.profit_percent }}%</span>
                         </div>
 
-                        <div class="text-sm space-y-2 text-base-content/80">
+                        <div class="text-sm space-y-2 text-base-content/80 flex-1">
                             <div class="flex justify-between">
                                 <span>Срок</span>
-                                <span class="font-medium text-base-content">{{ product.freeze_days }} дн.</span>
+                                <span class="font-medium text-base-content">{{ Number(product.freeze_days) }} ч.</span>
                             </div>
-                            <div class="flex justify-between">
-                                <span>Лимит на трейдера</span>
-                                <span class="font-medium text-base-content">
-                                    {{ Number(product.max_per_trader || 0).toLocaleString('ru-RU') }}
-                                </span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>Доступный объём</span>
+                            <div class="flex justify-between gap-4">
+                                <span>Сумма 1 пакета</span>
                                 <span class="font-medium text-base-content text-right">
-                                    {{ Number(product.current_volume).toLocaleString('ru-RU') }} / {{ Number(product.max_total_volume).toLocaleString('ru-RU') }}
+                                    {{ Number(product.min_amount || 10).toLocaleString('ru-RU') }} USDT
                                 </span>
                             </div>
                         </div>
@@ -135,7 +170,7 @@ const remaining = (returnAt, status) => {
                         <progress class="progress progress-primary w-full" :value="progress(product)" max="100"></progress>
 
                         <div class="card-actions mt-2">
-                            <PrimaryButton class="w-full justify-center" :disabled="Number(balance) < 10" @click="openBuyModal(product)">
+                            <PrimaryButton class="w-full justify-center" :disabled="!canPurchase(product)" @click="openBuyModal(product)">
                                 Приобрести
                             </PrimaryButton>
                         </div>
@@ -144,37 +179,98 @@ const remaining = (returnAt, status) => {
             </div>
 
             <div class="card bg-base-100 border border-base-300">
-                <div class="card-body p-0">
-                    <div class="px-5 pt-5 pb-3">
-                        <h3 class="text-lg font-semibold">Мои покупки</h3>
+                <div class="card-body">
+                    <h3 class="text-lg font-semibold">Мои договора · Сводка</h3>
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                        <div class="rounded-lg border border-base-300 p-3">
+                            <div class="text-base-content/70">Активно договоров</div>
+                            <div class="text-xl font-semibold">{{ summary.active_count }}</div>
+                        </div>
+                        <div class="rounded-lg border border-base-300 p-3">
+                            <div class="text-base-content/70">Общая сумма тела</div>
+                            <div class="text-xl font-semibold">{{ Number(summary.principal_total).toLocaleString('ru-RU') }}</div>
+                        </div>
+                        <div class="rounded-lg border border-base-300 p-3">
+                            <div class="text-base-content/70">Ожидаемая прибыль</div>
+                            <div class="text-xl font-semibold text-success">+{{ Number(summary.expected_profit_total).toLocaleString('ru-RU') }}</div>
+                        </div>
+                        <div class="rounded-lg border border-base-300 p-3">
+                            <div class="text-base-content/70">Обязательство к выплате</div>
+                            <div class="text-xl font-semibold">{{ Number(summary.payout_obligation_total).toLocaleString('ru-RU') }}</div>
+                        </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="grid gap-4 md:grid-cols-2" v-if="activeContracts.length">
+                <div v-for="contract in activeContracts" :key="contract.id" class="card bg-base-100 border border-base-300">
+                    <div class="card-body space-y-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <h4 class="text-lg font-semibold">Пакет: {{ contract.product?.name || '—' }}</h4>
+                                <div class="text-sm text-base-content/70">Сумма: {{ Number(contract.amount).toLocaleString('ru-RU') }} USDT</div>
+                                <div class="text-sm text-success">Доходность: +{{ Number(contract.profit_percent).toFixed(2) }}%</div>
+                            </div>
+                            <span class="badge" :class="getStatusClasses(contract.status)">{{ getStatusLabel(contract.status) }}</span>
+                        </div>
+
+                        <div class="text-sm grid grid-cols-2 gap-2">
+                            <div>Дата входа: {{ formatDate(contract.funded_at) }}</div>
+                            <div>Дата завершения: {{ formatDate(contract.return_at) }}</div>
+                            <div>Прибыль: +{{ contractProfit(contract).toFixed(2) }} USDT</div>
+                            <div>Итого: {{ contractTotal(contract).toFixed(2) }} USDT</div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>Прогресс</span>
+                                <span>{{ Math.round(contractProgress(contract)) }}%</span>
+                            </div>
+                            <progress class="progress progress-accent w-full" :value="contractProgress(contract)" max="100"></progress>
+                            <div class="text-xs text-base-content/70 mt-1">Осталось: {{ remaining(contract.return_at, contract.status) }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card bg-base-100 border border-base-300" v-else>
+                <div class="card-body text-base-content/60">Активных договоров пока нет.</div>
+            </div>
+
+            <div class="card bg-base-100 border border-base-300">
+                <div class="card-body space-y-4">
+                    <h3 class="text-lg font-semibold">История</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div class="rounded-lg border border-base-300 p-3">
+                            <div class="text-base-content/70">Всего завершено</div>
+                            <div class="text-xl font-semibold">{{ historySummary.completed_count }}</div>
+                        </div>
+                        <div class="rounded-lg border border-base-300 p-3">
+                            <div class="text-base-content/70">Общая прибыль</div>
+                            <div class="text-xl font-semibold text-success">+{{ Number(historySummary.completed_profit_total).toLocaleString('ru-RU') }}</div>
+                        </div>
+                    </div>
+
                     <div class="overflow-x-auto">
-                        <table class="table">
+                        <table class="table table-sm sm:table-md">
                             <thead>
                             <tr>
                                 <th>Пакет</th>
                                 <th>Сумма</th>
+                                <th>Прибыль</th>
                                 <th>Статус</th>
-                                <th>Осталось времени</th>
-                                <th>Ожидаемая прибыль</th>
-                                <th>Дата окончания</th>
+                                <th>Дата завершения</th>
                             </tr>
                             </thead>
                             <tbody>
-                            <tr v-for="cycle in cycles" :key="cycle.id">
-                                <td>{{ cycle.product?.name || '—' }}</td>
-                                <td>{{ Number(cycle.amount).toFixed(2) }} USDT</td>
-                                <td>
-                                    <span class="badge" :class="getStatusClasses(cycle.status)">
-                                        {{ getStatusLabel(cycle.status) }}
-                                    </span>
-                                </td>
-                                <td>{{ remaining(cycle.return_at, cycle.status) }}</td>
-                                <td class="text-success">+{{ (Number(cycle.amount) * (Number(cycle.profit_percent) / 100)).toFixed(2) }} USDT</td>
-                                <td>{{ formatDate(cycle.return_at) }}</td>
+                            <tr v-for="contract in historyContracts" :key="contract.id">
+                                <td>{{ contract.product?.name || '—' }}</td>
+                                <td>{{ Number(contract.amount).toFixed(2) }} USDT</td>
+                                <td class="text-success">+{{ contractProfit(contract).toFixed(2) }} USDT</td>
+                                <td><span class="badge" :class="getStatusClasses(contract.status)">{{ getStatusLabel(contract.status) }}</span></td>
+                                <td>{{ formatDate(contract.return_at) }}</td>
                             </tr>
-                            <tr v-if="cycles.length === 0">
-                                <td colspan="6" class="text-center text-base-content/60 py-8">У вас пока нет покупок.</td>
+                            <tr v-if="historyContracts.length === 0">
+                                <td colspan="5" class="text-center text-base-content/60 py-8">История пока пуста.</td>
                             </tr>
                             </tbody>
                         </table>
@@ -189,16 +285,17 @@ const remaining = (returnAt, status) => {
 
                 <form @submit.prevent="submitPurchase" class="space-y-4">
                     <div>
-                        <InputLabel for="amount" value="Сумма (USDT)" />
+                        <InputLabel for="quantity" value="Количество пакетов" />
                         <TextInput
-                            id="amount"
+                            id="quantity"
                             type="number"
-                            v-model="form.amount"
+                            v-model="form.quantity"
                             class="mt-1 block w-full"
-                            placeholder="Мин. 10.00"
-                            step="0.01"
+                            placeholder="1"
+                            step="1"
+                            min="1"
                         />
-                        <InputError :message="form.errors.amount" class="mt-2" />
+                        <InputError :message="form.errors.quantity" class="mt-2" />
                     </div>
 
                     <div class="rounded-lg border border-base-300 p-4 text-sm space-y-2">
@@ -208,9 +305,13 @@ const remaining = (returnAt, status) => {
                         </div>
                         <div class="flex justify-between">
                             <span>Срок</span>
-                            <span class="font-semibold">{{ selectedProduct?.freeze_days }} дн.</span>
+                            <span class="font-semibold">{{ selectedProduct?.freeze_days }} ч.</span>
                         </div>
                         <div class="divider my-1"></div>
+                        <div class="flex justify-between">
+                            <span>Сумма</span>
+                            <span class="font-semibold">{{ purchaseTotal }} USDT</span>
+                        </div>
                         <div class="flex justify-between text-base">
                             <span>Ожидаемая прибыль</span>
                             <span class="font-semibold text-success">+{{ profitCalculation }} USDT</span>

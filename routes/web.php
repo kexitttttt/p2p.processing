@@ -8,6 +8,7 @@ use App\Http\Controllers\TelegramSettingsController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\Trader\FundingController;
 use App\Http\Controllers\Admin\FundingCycleController;
+use App\Http\Controllers\Admin\FundingProductController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/payment/{order:uuid}', [\App\Http\Controllers\PaymentLinkController::class, 'show'])->name('payment.show');
@@ -258,6 +259,9 @@ Route::group(['middleware' => ['2fa']], function () {
 
         Route::get('/funding-cycles', [FundingCycleController::class, 'index'])->name('funding-cycles.index');
         Route::patch('/funding-cycles/{cycle}/confirm', [FundingCycleController::class, 'confirm'])->name('funding-cycles.confirm');
+        Route::get('/funding-products', [FundingProductController::class, 'index'])->name('funding-products.index');
+        Route::post('/funding-products', [FundingProductController::class, 'store'])->name('funding-products.store');
+        Route::patch('/funding-products/{product}', [FundingProductController::class, 'update'])->name('funding-products.update');
         Route::get('/withdrawals/address/whitelist', [\App\Http\Controllers\Admin\AddressWhitelistController::class, 'index'])->name('withdrawals.address.whitelist.index');
         Route::patch('/withdrawals/{invoice}/success', [\App\Http\Controllers\Admin\WithdrawalController::class, 'success'])->name('withdrawals.success');
         Route::patch('/withdrawals/{invoice}/fail', [\App\Http\Controllers\Admin\WithdrawalController::class, 'fail'])->name('withdrawals.fail');

@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\Money\Currency;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -215,7 +216,7 @@ class HandleInertiaRequests extends Middleware
                 'is_impersonated' => $request->user()?->isImpersonated()
             ],
             'ziggy' => fn () => [
-               // ...(new Ziggy)->toArray(),
+                ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
             'flash' => [

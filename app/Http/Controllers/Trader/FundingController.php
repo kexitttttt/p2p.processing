@@ -12,16 +12,13 @@ use Inertia\Inertia;
 
 class FundingController extends Controller
 {
-    private const MAX_ACTIVE_CYCLES = 3;
     private function extractTrustBalance(Wallet $wallet): float
     {
-        if (!$wallet->trust_balance) {
+        if (! $wallet->trust_balance) {
             return 0;
         }
 
-        $moneyArray = $wallet->trust_balance->toArray();
-
-        return (float) ($moneyArray['amount'] ?? $moneyArray['value'] ?? 0);
+        return (float) $wallet->trust_balance->toPrecision();
     }
 
     public function index()
@@ -30,12 +27,37 @@ class FundingController extends Controller
         $wallet = Wallet::where('user_id', $user->id)->first();
         $balance = $wallet ? $this->extractTrustBalance($wallet) : 0;
 
+        $cycles = TraderCycle::where('user_id', $user->id)
+            ->with('product')
+            ->orderByDesc('created_at')
+            ->get();
+
+        $activeStatuses = ['active', 'ready_to_close'];
+        $activeContracts = $cycles->whereIn('status', $activeStatuses)->values();
+        $historyContracts = $cycles->whereIn('status', ['completed', 'cancelled'])->values();
+
+        $activePrincipal = (float) $activeContracts->sum('amount');
+        $activeExpectedProfit = (float) $activeContracts
+            ->sum(fn (TraderCycle $cycle) => (float) $cycle->amount * ((float) $cycle->profit_percent / 100));
+
+        $completedContracts = $cycles->where('status', 'completed');
+        $completedProfit = (float) $completedContracts
+            ->sum(fn (TraderCycle $cycle) => (float) $cycle->amount * ((float) $cycle->profit_percent / 100));
+
         return Inertia::render('Funding/Index', [
             'products' => FundingProduct::where('is_active', true)->get(),
-            'cycles' => TraderCycle::where('user_id', $user->id)
-                ->with('product')
-                ->orderByDesc('created_at')
-                ->get(),
+            'activeContracts' => $activeContracts,
+            'historyContracts' => $historyContracts,
+            'summary' => [
+                'active_count' => $activeContracts->count(),
+                'principal_total' => round($activePrincipal, 2),
+                'expected_profit_total' => round($activeExpectedProfit, 2),
+                'payout_obligation_total' => round($activePrincipal + $activeExpectedProfit, 2),
+            ],
+            'historySummary' => [
+                'completed_count' => $completedContracts->count(),
+                'completed_profit_total' => round($completedProfit, 2),
+            ],
             'balance' => $balance,
         ]);
     }
@@ -44,7 +66,7 @@ class FundingController extends Controller
     {
         $request->validate([
             'product_id' => 'required|exists:funding_products,id',
-            'amount' => 'required|numeric|min:10',
+            'quantity' => 'required|integer|min:1|max:100',
         ]);
 
         $user = auth()->user();
@@ -56,49 +78,69 @@ class FundingController extends Controller
 
         $currentBalance = $this->extractTrustBalance($wallet);
 
-        if ($currentBalance < $request->amount) {
-            return back()->withErrors(['amount' => 'Недостаточно средств на Trust балансе']);
+        $unitAmount = (float) ($product->min_amount ?? 10);
+        $totalAmount = round($unitAmount * (int) $request->quantity, 2);
+
+        if ($currentBalance < $totalAmount) {
+            return back()->withErrors(['quantity' => 'Недостаточно средств на Trust балансе']);
         }
 
-        $activeCyclesCount = TraderCycle::where('user_id', $user->id)
-            ->whereIn('status', ['active', 'ready_to_close'])
-            ->count();
+        $errorMessage = null;
 
-        if ($activeCyclesCount >= self::MAX_ACTIVE_CYCLES) {
-            return back()->withErrors(['amount' => 'Достигнут лимит активных циклов (3 одновременно)']);
-        }
+        DB::transaction(function () use ($user, $wallet, $product, $request, &$errorMessage, $totalAmount, $unitAmount) {
+            $lockedWallet = Wallet::query()
+                ->where('id', $wallet->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $traderActiveVolume = TraderCycle::where('user_id', $user->id)
-            ->where('product_id', $product->id)
-            ->whereIn('status', ['active', 'ready_to_close'])
-            ->sum('amount');
+            $lockedProduct = FundingProduct::query()
+                ->where('id', $product->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($product->max_per_trader > 0 && ($traderActiveVolume + $request->amount) > $product->max_per_trader) {
-            return back()->withErrors(['amount' => 'Превышен лимит на трейдера для этого пакета']);
-        }
+            $currentBalance = $this->extractTrustBalance($lockedWallet);
 
-        if ($product->max_total_volume > 0 &&
-           ($product->current_volume + $request->amount) > $product->max_total_volume) {
-            return back()->withErrors(['amount' => 'Лимит продукта исчерпан']);
-        }
+            if ($currentBalance < $totalAmount) {
+                $errorMessage = 'Недостаточно средств на Trust балансе';
 
-        DB::transaction(function () use ($user, $wallet, $product, $request, $currentBalance) {
-            $newBalance = $currentBalance - $request->amount;
-            $wallet->update(['trust_balance' => $newBalance]);
-            $wallet->increment('locked_balance', $request->amount);
+                return;
+            }
 
-            TraderCycle::create([
-                'user_id' => $user->id,
-                'product_id' => $product->id,
-                'amount' => $request->amount,
-                'profit_percent' => $product->profit_percent,
-                'funded_at' => now(),
-                'return_at' => now()->addDays($product->freeze_days),
-                'status' => 'active',
+            $activeContractsCount = TraderCycle::where('user_id', $user->id)
+                ->where('product_id', $lockedProduct->id)
+                ->whereIn('status', ['active', 'ready_to_close'])
+                ->lockForUpdate()
+                ->count();
+
+            if ($lockedProduct->max_per_trader > 0 && ($activeContractsCount + (int) $request->quantity) > (int) $lockedProduct->max_per_trader) {
+                $errorMessage = 'Превышен лимит количества пакетов для трейдера';
+
+                return;
+            }
+
+            $lockedWallet->update([
+                'trust_balance' => $currentBalance - $totalAmount,
+                'locked_balance' => (float) $lockedWallet->locked_balance + $totalAmount,
             ]);
 
-            $product->increment('current_volume', $request->amount);
+            for ($i = 0; $i < (int) $request->quantity; $i++) {
+                TraderCycle::create([
+                    'user_id' => $user->id,
+                    'product_id' => $lockedProduct->id,
+                    'amount' => $unitAmount,
+                    'packages_quantity' => 1,
+                    'profit_percent' => $lockedProduct->profit_percent,
+                    'funded_at' => now(),
+                    'return_at' => now()->addHours((int) $lockedProduct->freeze_days),
+                    'status' => 'active',
+                    'is_overdue' => false,
+                ]);
+            }
         });
+
+        if ($errorMessage) {
+            return back()->withErrors(['quantity' => $errorMessage]);
+        }
 
         return back()->with('success', 'Пакет успешно приобретен');
     }

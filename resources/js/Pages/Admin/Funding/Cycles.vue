@@ -1,5 +1,5 @@
 <script setup>
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 
@@ -27,9 +27,14 @@ const confirm = (cycleId) => {
 
     <AuthenticatedLayout>
         <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-            <div>
-                <h1 class="text-2xl font-semibold">Оборотные пакеты · подтверждение выплат</h1>
-                <p class="text-base-content/70">Циклы в статусе «Ожидает подтверждения».</p>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h1 class="text-2xl font-semibold">Оборотные пакеты · подтверждение выплат</h1>
+                    <p class="text-base-content/70">Циклы в статусе «Ожидает подтверждения».</p>
+                </div>
+                <Link :href="route('admin.funding-products.index')" class="btn btn-outline btn-sm">
+                    Управление позициями
+                </Link>
             </div>
 
             <div class="card bg-base-100 border border-base-300">

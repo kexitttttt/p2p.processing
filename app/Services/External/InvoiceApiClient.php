@@ -77,7 +77,7 @@ class InvoiceApiClient
     protected function ensureConfigured(): void
     {
         if (! $this->baseUrl || ! $this->apiKey || ! $this->merchantId) {
-            abort(500, 'Deposit provider is not configured');
+            abort(422, 'Deposit provider is not configured. Set DEPOSIT_PROVIDER_BASE_URL, DEPOSIT_PROVIDER_API_KEY and DEPOSIT_PROVIDER_MERCHANT_ID.');
         }
     }
 

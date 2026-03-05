@@ -175,7 +175,27 @@ class SettingsService implements SettingsServiceContract
 
     public function getDefaultReserveBalanceLimit(): int
     {
-        return (int) $this->getParam(self::DEFAULT_RESERVE_BALANCE_LIMIT);
+        try {
+            $value = $this->getParam(self::DEFAULT_RESERVE_BALANCE_LIMIT);
+        } catch (SettingsException) {
+            Setting::updateOrCreate([
+                'key' => self::DEFAULT_RESERVE_BALANCE_LIMIT,
+            ], [
+                'value' => 500,
+            ]);
+
+            cache()->put('app-settings', Setting::all());
+            $this->settings = null;
+
+            $value = 500;
+        }
+
+        if ($value === null || $value === '') {
+            $value = 500;
+            $this->updateParam(self::DEFAULT_RESERVE_BALANCE_LIMIT, $value);
+        }
+
+        return (int) $value;
     }
 
     public function updateDefaultReserveBalanceLimit(int $value): void
@@ -305,6 +325,12 @@ class SettingsService implements SettingsServiceContract
         }
 
         $setting = $this->settings->where('key', $key)->first();
+
+        if (! $setting) {
+            $this->settings = Setting::all();
+            cache()->put('app-settings', $this->settings);
+            $setting = $this->settings->where('key', $key)->first();
+        }
 
         if (! $setting) {
             throw SettingsException::make("Параметр настроек '{$key}' не найден или пуст");
