@@ -28,14 +28,13 @@ class FundingProductController extends Controller
             'max_total_volume' => 'required|numeric|min:0',
             'min_amount' => 'required|numeric|min:1',
             'max_per_trader' => 'required|integer|min:0|max:1000',
-            'freeze_days' => 'required|integer|min:1|max:365',
-            'profit_percent' => 'required|numeric|min:0|max:1000',
-            'max_total_volume' => 'required|numeric|min:0',
-            'max_per_trader' => 'required|numeric|min:0',
             'is_active' => 'required|boolean',
         ]);
 
-        FundingProduct::create($data + ['current_volume' => 0]);
+        FundingProduct::create([
+            ...$data,
+            'current_volume' => 0,
+        ]);
 
         return back()->with('success', 'Позиция создана');
     }
@@ -49,10 +48,6 @@ class FundingProductController extends Controller
             'max_total_volume' => 'required|numeric|min:0',
             'min_amount' => 'required|numeric|min:1',
             'max_per_trader' => 'required|integer|min:0|max:1000',
-            'freeze_days' => 'required|integer|min:1|max:365',
-            'profit_percent' => 'required|numeric|min:0|max:1000',
-            'max_total_volume' => 'required|numeric|min:0',
-            'max_per_trader' => 'required|numeric|min:0',
             'is_active' => 'required|boolean',
         ]);
 

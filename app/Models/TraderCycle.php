@@ -11,10 +11,7 @@ class TraderCycle extends Model
 		'funded_at' => 'datetime',
 		'return_at' => 'datetime',
 		'confirmed_at' => 'datetime',
-<<<<<<< HEAD
 		'is_overdue' => 'boolean',
-=======
->>>>>>> origin/main
 	];
 
 	public function product()

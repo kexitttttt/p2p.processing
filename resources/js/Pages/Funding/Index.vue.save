@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import { useForm, Head } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
+import PrimaryButton from '@/Components/PrimaryButton.vue'
+import SecondaryButton from '@/Components/SecondaryButton.vue'
 import Modal from '@/Components/Modals/Modal.vue'
 import InputLabel from '@/Components/InputLabel.vue'
 import TextInput from '@/Components/TextInput.vue'
@@ -43,44 +45,8 @@ const submitPurchase = () => {
     })
 }
 
-/* =============================
-   ПОДСЧЕТ ПАКЕТОВ ТРЕЙДЕРА
-============================= */
-
-const traderPackages = (productId) => {
-    return props.activeContracts.filter(
-        c => c.product_id === productId
-    ).length
-}
-
-/* =============================
-   ПРОВЕРКА ПОКУПКИ
-============================= */
-
-const canPurchase = (product) => {
-
-    if (!product?.is_active) return false
-
-    const minAmount = Number(product.min_amount)
-
-    if (Number(props.balance) < minAmount) return false
-
-    const owned = traderPackages(product.id)
-
-    if (product.max_per_trader > 0 && owned >= product.max_per_trader) {
-        return false
-    }
-
-    return true
-}
-
-/* =============================
-   РАСЧЕТ СУММЫ
-============================= */
-
 const purchaseTotal = computed(() => {
     if (!selectedProduct.value) return 0
-
     return (
         Number(selectedProduct.value.min_amount) *
         Number(form.quantity)
@@ -88,61 +54,115 @@ const purchaseTotal = computed(() => {
 })
 
 const profitCalculation = computed(() => {
-
     if (!selectedProduct.value) return 0
 
     return (
         Number(purchaseTotal.value) *
         (Number(selectedProduct.value.profit_percent) / 100)
     ).toFixed(2)
-
 })
 
+const formatDate = (date) =>
+    new Date(date).toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    })
+
+const getStatusClasses = (status) =>
+    ({
+        active: 'badge-info',
+        ready_to_close: 'badge-warning',
+        completed: 'badge-success',
+        cancelled: 'badge-error',
+    }[status] || 'badge-ghost')
+
+const getStatusLabel = (status) =>
+    ({
+        active: 'В работе',
+        ready_to_close: 'Ожидает подтверждения',
+        completed: 'Выплачено',
+        cancelled: 'Отменено',
+    }[status] || status)
+
+const progress = (product) => {
+    if (Number(product.max_total_volume) <= 0) return 0
+
+    return Math.min(
+        (Number(product.current_volume) /
+            Number(product.max_total_volume)) *
+            100,
+        100
+    )
+}
+
+const canPurchase = (product) => {
+    if (!product?.is_active) return false
+    const minAmount = Number(product.min_amount)
+
+    return Number(props.balance) >= minAmount
+}
+
+const contractProfit = (contract) =>
+    Number(contract.amount) *
+    (Number(contract.profit_percent) / 100)
+
+const contractTotal = (contract) =>
+    Number(contract.amount) + contractProfit(contract)
+
+const contractProgress = (contract) => {
+    if (contract.status === 'ready_to_close' || contract.status === 'completed')
+        return 100
+
+    const fundedAt = new Date(contract.funded_at).getTime()
+    const returnAt = new Date(contract.return_at).getTime()
+
+    const total = returnAt - fundedAt
+    if (total <= 0) return 0
+
+    const elapsed = Date.now() - fundedAt
+
+    return Math.max(0, Math.min((elapsed / total) * 100, 100))
+}
+
+const remaining = (returnAt, status) => {
+    if (status !== 'active') return '—'
+
+    const diff = new Date(returnAt).getTime() - Date.now()
+    if (diff <= 0) return 'Завершён'
+
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+
+    return `${hours}ч`
+}
 </script>
 
 <template>
-
 <Head title="Оборотные пакеты" />
 
 <AuthenticatedLayout>
 
 <div class="max-w-7xl mx-auto p-6 space-y-6">
 
-<!-- HEADER -->
-
 <div class="flex justify-between items-end">
-
 <div>
-<h1 class="text-2xl font-semibold">
-Оборотные пакеты
-</h1>
-
+<h1 class="text-2xl font-semibold">Оборотные пакеты</h1>
 <p class="text-base-content/70">
 Полуавтомат: покупка сразу, выплата после подтверждения админом
 </p>
-
 </div>
 
 <div class="stats border border-base-300">
-
 <div class="stat py-3 px-4">
-
-<div class="stat-title">
-Доступный баланс
-</div>
-
+<div class="stat-title">Доступный баланс</div>
 <div class="stat-value text-2xl">
 {{ Number(balance).toFixed(2) }}
 </div>
-
-<div class="stat-desc">
-USDT
+<div class="stat-desc">USDT</div>
 </div>
-
 </div>
-
-</div>
-
 </div>
 
 <!-- PRODUCTS -->
@@ -158,66 +178,124 @@ class="card bg-base-100 border border-base-300 shadow-sm"
 <div class="card-body">
 
 <div class="flex justify-between">
-
-<h2 class="card-title">
-{{ product.name }}
-</h2>
-
+<h2 class="card-title">{{ product.name }}</h2>
 <span class="badge badge-success">
 +{{ product.profit_percent }}%
 </span>
-
 </div>
 
 <div class="text-sm space-y-2">
 
 <div class="flex justify-between">
-
 <span>Срок</span>
-
 <span class="font-medium">
 {{ product.freeze_days }} ч.
 </span>
-
 </div>
 
 <div class="flex justify-between">
-
 <span>Сумма пакета</span>
-
 <span class="font-medium">
 {{ Number(product.min_amount).toLocaleString('ru-RU') }} USDT
 </span>
-
 </div>
 
 <div class="flex justify-between">
-
-<span>Ваши пакеты</span>
-
+<span>Лимит на трейдера</span>
 <span class="font-medium">
-
-{{ traderPackages(product.id) }}
-
-<span v-if="product.max_per_trader > 0">
- / {{ product.max_per_trader }}
+{{ Number(product.max_per_trader || 0).toLocaleString('ru-RU') }}
 </span>
-
-</span>
-
 </div>
 
 </div>
 
-<div class="card-actions mt-3">
+<progress
+class="progress progress-primary w-full"
+:value="progress(product)"
+max="100"
+/>
 
-<button
-class="btn btn-primary w-full"
+<div class="card-actions mt-2">
+<PrimaryButton
+class="w-full justify-center"
 :disabled="!canPurchase(product)"
 @click="openBuyModal(product)"
 >
 Приобрести
-</button>
+</PrimaryButton>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- ACTIVE CONTRACTS -->
+
+<div v-if="activeContracts.length" class="grid gap-4 md:grid-cols-2">
+
+<div
+v-for="contract in activeContracts"
+:key="contract.id"
+class="card bg-base-100 border border-base-300"
+>
+
+<div class="card-body space-y-3">
+
+<div class="flex justify-between">
+
+<div>
+<h4 class="font-semibold">
+{{ contract.product?.name }}
+</h4>
+
+<div class="text-sm">
+{{ Number(contract.amount).toFixed(2) }} USDT
+</div>
+</div>
+
+<span class="badge" :class="getStatusClasses(contract.status)">
+{{ getStatusLabel(contract.status) }}
+</span>
+
+</div>
+
+<div class="text-sm grid grid-cols-2 gap-2">
+
+<div>Вход: {{ formatDate(contract.funded_at) }}</div>
+
+<div>Выход: {{ formatDate(contract.return_at) }}</div>
+
+<div>
+Прибыль:
++{{ contractProfit(contract).toFixed(2) }} USDT
+</div>
+
+<div>
+Итого:
+{{ contractTotal(contract).toFixed(2) }} USDT
+</div>
+
+</div>
+
+<div>
+
+<div class="flex justify-between text-xs mb-1">
+<span>Прогресс</span>
+<span>{{ Math.round(contractProgress(contract)) }}%</span>
+</div>
+
+<progress
+class="progress progress-accent w-full"
+:value="contractProgress(contract)"
+max="100"
+/>
+
+<div class="text-xs text-base-content/70 mt-1">
+Осталось:
+{{ remaining(contract.return_at, contract.status) }}
+</div>
+
+</div>
 
 </div>
 
@@ -237,10 +315,7 @@ class="btn btn-primary w-full"
 Приобрести пакет: {{ selectedProduct?.name }}
 </h3>
 
-<form
-@submit.prevent="submitPurchase"
-class="space-y-6"
->
+<form @submit.prevent="submitPurchase" class="space-y-6">
 
 <div>
 
@@ -258,79 +333,61 @@ step="1"
 
 </div>
 
+
 <div class="rounded-xl border border-base-300 p-4 bg-base-200 space-y-3">
 
 <div class="flex justify-between text-sm">
-
 <span>Цена одного пакета</span>
-
 <span class="font-medium">
 {{ Number(selectedProduct?.min_amount).toLocaleString('ru-RU') }} USDT
 </span>
-
 </div>
 
 <div class="flex justify-between text-sm">
-
 <span>Доходность</span>
-
 <span class="font-medium text-success">
 +{{ selectedProduct?.profit_percent }}%
 </span>
-
 </div>
 
 <div class="flex justify-between text-sm">
-
 <span>Срок</span>
-
 <span class="font-medium">
 {{ selectedProduct?.freeze_days }} ч.
 </span>
-
 </div>
 
 <div class="divider my-1"></div>
 
 <div class="flex justify-between text-base">
-
 <span>Сумма покупки</span>
-
 <span class="font-semibold">
 {{ purchaseTotal }} USDT
 </span>
-
 </div>
 
 <div class="flex justify-between text-base">
-
 <span>Ожидаемая прибыль</span>
-
 <span class="font-semibold text-success text-lg">
 +{{ profitCalculation }} USDT
 </span>
-
 </div>
 
 </div>
 
-<div class="flex items-center justify-end gap-4 pt-4">
 
-<button
-type="button"
-class="btn btn-outline btn-md min-w-[120px]"
-@click="closeModal"
->
+<div class="flex justify-end gap-3 pt-2">
+
+<SecondaryButton @click="closeModal">
 Отмена
-</button>
+</SecondaryButton>
 
-<button
-type="submit"
-class="btn btn-primary btn-md min-w-[200px]"
+<PrimaryButton
 :disabled="form.processing"
+:class="{ 'opacity-50': form.processing }"
 >
 Подтвердить покупку
-</button>
+</PrimaryButton>
 
 </div>
 
@@ -340,8 +397,8 @@ class="btn btn-primary btn-md min-w-[200px]"
 
 </Modal>
 
-</div>
 
 </AuthenticatedLayout>
 
 </template>
+
