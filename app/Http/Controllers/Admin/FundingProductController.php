@@ -31,6 +31,8 @@ class FundingProductController extends Controller
             'is_active' => 'required|boolean',
         ]);
 
+        $data['is_active'] = $request->boolean('is_active');
+
         FundingProduct::create([
             ...$data,
             'current_volume' => 0,
@@ -50,6 +52,8 @@ class FundingProductController extends Controller
             'max_per_trader' => 'required|integer|min:0|max:1000',
             'is_active' => 'required|boolean',
         ]);
+
+        $data['is_active'] = $request->boolean('is_active');
 
         $product->update($data);
 

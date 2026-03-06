@@ -14,11 +14,29 @@ class FundingController extends Controller
 {
     private function extractTrustBalance(?Wallet $wallet): float
     {
-        if (!$wallet || !$wallet->trust_balance) {
+        if (! $wallet || ! $wallet->trust_balance) {
             return 0;
         }
 
         return (float) (string) $wallet->trust_balance;
+    }
+
+    private function contractProfit(TraderCycle $cycle): float
+    {
+        if (! is_null($cycle->profit_amount)) {
+            return (float) $cycle->profit_amount;
+        }
+
+        return round((float) $cycle->amount * ((float) $cycle->profit_percent / 100), 2);
+    }
+
+    private function contractPayout(TraderCycle $cycle): float
+    {
+        if (! is_null($cycle->payout_amount)) {
+            return (float) $cycle->payout_amount;
+        }
+
+        return round((float) $cycle->amount + $this->contractProfit($cycle), 2);
     }
 
     public function index()
@@ -28,37 +46,31 @@ class FundingController extends Controller
         $wallet = Wallet::where('user_id', $user->id)->first();
         $balance = $this->extractTrustBalance($wallet);
 
-        $cycles = TraderCycle::where('user_id', $user->id)
+        $activeContracts = TraderCycle::where('user_id', $user->id)
             ->with('product')
-            ->orderByDesc('created_at')
+            ->whereIn('status', ['active', 'ready_to_close'])
+            ->orderBy('return_at')
             ->get();
 
-        $activeStatuses = ['active', 'ready_to_close'];
-
-        $activeContracts = $cycles
-            ->whereIn('status', $activeStatuses)
-            ->values();
-
-        $historyContracts = $cycles
+        $historyContracts = TraderCycle::where('user_id', $user->id)
+            ->with('product')
             ->whereIn('status', ['completed', 'cancelled'])
-            ->values();
+            ->orderByDesc('confirmed_at')
+            ->orderByDesc('updated_at')
+            ->get();
 
         $activePrincipal = (float) $activeContracts->sum('amount');
+        $activeExpectedProfit = (float) $activeContracts->sum(fn (TraderCycle $cycle) => $this->contractProfit($cycle));
+        $activePayout = (float) $activeContracts->sum(fn (TraderCycle $cycle) => $this->contractPayout($cycle));
 
-        $activeExpectedProfit = (float) $activeContracts->sum(
-            fn (TraderCycle $cycle) =>
-                (float) $cycle->amount * ((float) $cycle->profit_percent / 100)
-        );
-
-        $completedContracts = $cycles->where('status', 'completed');
-
-        $completedProfit = (float) $completedContracts->sum(
-            fn (TraderCycle $cycle) =>
-                (float) $cycle->amount * ((float) $cycle->profit_percent / 100)
-        );
+        $completedContracts = $historyContracts->where('status', 'completed');
+        $completedProfit = (float) $completedContracts->sum(fn (TraderCycle $cycle) => $this->contractProfit($cycle));
 
         return Inertia::render('Funding/Index', [
-            'products' => FundingProduct::where('is_active', true)->get(),
+            'products' => FundingProduct::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(),
 
             'activeContracts' => $activeContracts,
             'historyContracts' => $historyContracts,
@@ -67,7 +79,7 @@ class FundingController extends Controller
                 'active_count' => $activeContracts->count(),
                 'principal_total' => round($activePrincipal, 2),
                 'expected_profit_total' => round($activeExpectedProfit, 2),
-                'payout_obligation_total' => round($activePrincipal + $activeExpectedProfit, 2),
+                'payout_obligation_total' => round($activePayout, 2),
             ],
 
             'historySummary' => [
@@ -89,7 +101,7 @@ class FundingController extends Controller
         $user = auth()->user();
         $product = FundingProduct::findOrFail($request->product_id);
 
-        if (!$product->is_active) {
+        if (! $product->is_active) {
             return back()->withErrors([
                 'quantity' => 'Пакет недоступен для покупки',
             ]);
@@ -102,10 +114,11 @@ class FundingController extends Controller
         $errorMessage = null;
 
         DB::transaction(function () use ($user, $product, $quantity, $unitAmount, $totalAmount, &$errorMessage) {
-
             $wallet = Wallet::where('user_id', $user->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            $lockedProduct = FundingProduct::query()->lockForUpdate()->findOrFail($product->id);
 
             $balance = $this->extractTrustBalance($wallet);
 
@@ -115,17 +128,17 @@ class FundingController extends Controller
             }
 
             $activeContracts = TraderCycle::where('user_id', $user->id)
-                ->where('product_id', $product->id)
+                ->where('product_id', $lockedProduct->id)
                 ->whereIn('status', ['active', 'ready_to_close'])
                 ->lockForUpdate()
                 ->count();
 
-            if ($product->max_per_trader > 0 && ($activeContracts + $quantity) > $product->max_per_trader) {
+            if ($lockedProduct->max_per_trader > 0 && ($activeContracts + $quantity) > $lockedProduct->max_per_trader) {
                 $errorMessage = 'Превышен лимит пакетов для трейдера';
                 return;
             }
 
-            if ($product->max_total_volume > 0 && ($product->current_volume + $totalAmount) > $product->max_total_volume) {
+            if ($lockedProduct->max_total_volume > 0 && ((float) $lockedProduct->current_volume + $totalAmount) > (float) $lockedProduct->max_total_volume) {
                 $errorMessage = 'Лимит продукта исчерпан';
                 return;
             }
@@ -135,23 +148,27 @@ class FundingController extends Controller
                 'locked_balance' => (float) $wallet->locked_balance + $totalAmount,
             ]);
 
-            for ($i = 0; $i < $quantity; $i++) {
+            $profitPerUnit = round($unitAmount * ((float) $lockedProduct->profit_percent / 100), 2);
+            $payoutPerUnit = round($unitAmount + $profitPerUnit, 2);
 
+            for ($i = 0; $i < $quantity; $i++) {
                 TraderCycle::create([
                     'user_id' => $user->id,
-                    'product_id' => $product->id,
+                    'product_id' => $lockedProduct->id,
+                    'product_name' => $lockedProduct->name,
                     'amount' => $unitAmount,
                     'packages_quantity' => 1,
-                    'profit_percent' => $product->profit_percent,
+                    'profit_percent' => $lockedProduct->profit_percent,
+                    'profit_amount' => $profitPerUnit,
+                    'payout_amount' => $payoutPerUnit,
                     'funded_at' => now(),
-                    'return_at' => now()->addHours($product->freeze_days),
+                    'return_at' => now()->addHours((int) $lockedProduct->freeze_days),
                     'status' => 'active',
                     'is_overdue' => false,
                 ]);
-
             }
 
-            $product->increment('current_volume', $totalAmount);
+            $lockedProduct->increment('current_volume', $totalAmount);
         });
 
         if ($errorMessage) {

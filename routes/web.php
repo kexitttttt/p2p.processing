@@ -259,6 +259,7 @@ Route::group(['middleware' => ['2fa']], function () {
 
         Route::get('/funding-cycles', [FundingCycleController::class, 'index'])->name('funding-cycles.index');
         Route::patch('/funding-cycles/{cycle}/confirm', [FundingCycleController::class, 'confirm'])->name('funding-cycles.confirm');
+        Route::patch('/funding-cycles/{cycle}/cancel', [FundingCycleController::class, 'cancel'])->name('funding-cycles.cancel');
         Route::get('/funding-products', [FundingProductController::class, 'index'])->name('funding-products.index');
         Route::post('/funding-products', [FundingProductController::class, 'store'])->name('funding-products.store');
         Route::patch('/funding-products/{product}', [FundingProductController::class, 'update'])->name('funding-products.update');
